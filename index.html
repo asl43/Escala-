@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Sistema de Escala de Serviço - Completo</title>
+<title>Sistema de Escala de Serviço - Google Sheets</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -55,6 +55,33 @@ body{
 h1{
     color:#fff;
     margin:0;
+}
+.sync-badge{
+    background: var(--card-bg);
+    padding:8px 15px;
+    border-radius:20px;
+    font-size:12px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-weight:bold;
+}
+.sync-indicator{
+    width:10px;
+    height:10px;
+    border-radius:50%;
+    background:#27ae60;
+    animation: pulse 2s infinite;
+}
+.sync-indicator.syncing{
+    background:#3498db;
+}
+.sync-indicator.error{
+    background:#e74c3c;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.1); }
 }
 .theme-toggle{
     background: var(--card-bg);
@@ -368,8 +395,20 @@ footer{
 <div class="container">
 
 <div class="header-controls no-print">
-<h1>📅 Sistema de Escala de Serviço</h1>
-<button class="theme-toggle" onclick="toggleTheme()">🌓 Modo Escuro/Claro</button>
+<h1>📅 Sistema de Escala - Google Sheets</h1>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <div class="sync-badge">
+        <div class="sync-indicator" id="syncIndicator"></div>
+        <span id="syncStatus">Sincronizado ☁️</span>
+    </div>
+    <button class="theme-toggle" onclick="toggleTheme()">🌓 Modo Escuro/Claro</button>
+</div>
+</div>
+
+<div class="card no-print">
+<div class="info-box" style="text-align:center;">
+    <span id="apiStatus">☁️ <strong>Conectado ao Google Sheets</strong> - Sincronização automática</span>
+</div>
 </div>
 
 <!-- ESTATÍSTICAS -->
@@ -430,8 +469,8 @@ footer{
         <div style="background:var(--info-box-bg);padding:15px;border-radius:5px;margin-top:10px;">
             <p style="margin:0 0 10px 0;font-weight:bold;">⚠️ Serviços Extra e Faltas não são recorrentes</p>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
-                <input type="date" id="dataUnicaServico" placeholder="Data do serviço" required>
-                <input type="number" id="qtdDiasServico" placeholder="Quantidade de dias" min="1" max="365" required>
+                <input type="date" id="dataUnicaServico" placeholder="Data do serviço">
+                <input type="number" id="qtdDiasServico" placeholder="Quantidade de dias" min="1" max="365">
             </div>
             <small style="display:block;margin-top:5px;color:#555;">
                 O sistema marcará a quantidade de dias informada a partir da data selecionada.<br>
@@ -439,6 +478,8 @@ footer{
             </small>
         </div>
     </div>
+    
+    <div id="camposRecorrentes" style="grid-column:1/-1;display:contents;">
     
     <select id="tipoEscala" onchange="ajustarCamposEscala()" required>
         <option value="">Tipo de Escala</option>
@@ -451,13 +492,11 @@ footer{
         <option value="personalizada">Personalizada</option>
     </select>
     
-    <div id="camposRecorrentes" style="grid-column:1/-1;display:contents;">
-    
     <div id="camposDiaPosterior" class="oculto" style="grid-column:1/-1;">
         <div style="background:var(--info-box-bg);padding:10px;border-radius:5px;margin-top:10px;">
             <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
                 <input type="checkbox" id="marcarDiaPosterior">
-                <span>Marcar o dia seguinte também (2 dias consecutivos)?</span>
+                <span>✅ Marcar o dia seguinte também (2 dias consecutivos)?</span>
             </label>
         </div>
     </div>
@@ -635,81 +674,159 @@ footer{
 </div>
 
 <footer class="no-print">
-Sistema Completo de Escala de Serviço • Funciona offline • v2.0
+Sistema de Escala - Google Sheets Integrado • Sincronização Automática • v3.0
 </footer>
 
 </div>
 
+<script>
 // ========================================
 // ⚡ GOOGLE SHEETS INTEGRATION
 // ========================================
 
-const API_URL = "https://script.google.com/macros/s/AKfycbzSFcfnIbnmj4MdN1f2biPRzmIC9lcr8CUA6oKxbUguOA-praBpeU5v01dFJn1lNJnbRQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbz2j7canmvq_3bmwp53VIzDKTKEsmByY2a0L1HMzi52-JM2LeBsau05kNhvw08oP5q-VA/exec";
 let usarGoogleSheets = (API_URL !== "COLE_SUA_URL_AQUI");
 let isSyncing = false;
 let syncInterval = null;
+let escalas = [];
+let eventos = [];
+let escalasPlantonistas = [];
+let mesAtualVizualizado = new Date();
+let visualizacaoAtual = 'mensal';
+
+// ========================================
+// INTEGRAÇÃO GOOGLE SHEETS
+// ========================================
 
 async function carregarDadosDoSheets() {
-    if (!usarGoogleSheets) { carregarDados(); return; }
+    if (!usarGoogleSheets) {
+        carregarDadosLocal();
+        return;
+    }
+    
     if (isSyncing) return;
     isSyncing = true;
-    document.getElementById("syncStatus").textContent = "Sincronizando...";
+    updateSyncStatus('Sincronizando...', 'syncing');
+    
     try {
-        const res = await fetch(`${API_URL}?action=sync&_=${Date.now()}`);
-        const data = await res.json();
+        const response = await fetch(`${API_URL}?action=sync&_=${Date.now()}`);
+        const data = await response.json();
+        
         if (data.success) {
             escalasPlantonistas = data.escalasPlantonistas || [];
             escalas = data.escalasAvulsas || [];
             eventos = data.eventos || [];
+            
             escalasPlantonistas.forEach(e => {
                 e.datas = gerarDatasEscala(e.dataInicio, e.mesAte, e.tipoOriginal, e.horasTrabalho, e.horasFolga, e.opcoes);
             });
-            renderEscalasPlantonistas(); renderEscala(); renderEventos();
-            atualizarVisualizacao(); calcularEstatisticas();
-            document.getElementById("syncStatus").textContent = "Sincronizado ☁️";
+            
+            renderizarTudo();
+            updateSyncStatus('Sincronizado ☁️', 'success');
         }
-    } catch(e) { console.error(e); carregarDados(); } finally { isSyncing = false; }
+    } catch (error) {
+        console.error('Erro:', error);
+        updateSyncStatus('Offline', 'error');
+        carregarDadosLocal();
+    } finally {
+        isSyncing = false;
+    }
 }
 
 async function salvarNoSheets(dados, tipo) {
-    if (!usarGoogleSheets) { salvarDados(); return; }
-    const fd = new FormData();
-    fd.append("action", tipo);
-    fd.append("data", JSON.stringify(dados));
+    if (!usarGoogleSheets) {
+        salvarDadosLocal();
+        return { success: true };
+    }
+    
+    updateSyncStatus('Salvando...', 'syncing');
+    
     try {
-        await fetch(API_URL, { method: "POST", body: fd });
-        setTimeout(() => carregarDadosDoSheets(), 1000);
-    } catch(e) { salvarDados(); }
+        const formData = new FormData();
+        formData.append('action', tipo);
+        formData.append('data', JSON.stringify(dados));
+        
+        const response = await fetch(API_URL, { method: 'POST', body: formData });
+        const result = await response.json();
+        
+        if (result.success) {
+            updateSyncStatus('Salvo!', 'success');
+            setTimeout(() => carregarDadosDoSheets(), 1000);
+        }
+        
+        return result;
+    } catch (error) {
+        console.error('Erro:', error);
+        salvarDadosLocal();
+        return { success: false };
+    }
 }
 
-async function excluirDoSheets(id, tipo, idx) {
-    if (!usarGoogleSheets) { salvarDados(); renderEscalasPlantonistas(); renderEscala(); renderEventos(); atualizarVisualizacao(); calcularEstatisticas(); return; }
+async function excluirDoSheets(id, tipo, index) {
+    if (!usarGoogleSheets) {
+        salvarDadosLocal();
+        renderizarTudo();
+        return;
+    }
+    
     let url = `${API_URL}?action=${tipo}`;
     if (id) url += `&id=${id}`;
-    if (idx !== undefined) url += `&index=${idx}`;
+    if (index !== undefined) url += `&index=${index}`;
+    
     await fetch(url);
     setTimeout(() => carregarDadosDoSheets(), 1000);
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-    if (usarGoogleSheets) {
-        carregarDadosDoSheets();
-        setInterval(() => { if (!isSyncing) carregarDadosDoSheets(); }, 5000);
-        document.getElementById("apiStatus").innerHTML = "✅ <strong>Google Sheets Conectado</strong>";
-    } else {
-        carregarDados();
-        document.getElementById("apiStatus").innerHTML = "⚠️ <strong>Offline</strong> - Configure API_URL";
+function updateSyncStatus(msg, status) {
+    const ind = document.getElementById('syncIndicator');
+    const txt = document.getElementById('syncStatus');
+    const api = document.getElementById('apiStatus');
+    
+    if (ind) ind.className = 'sync-indicator ' + status;
+    if (txt) txt.textContent = msg;
+    if (api) {
+        api.innerHTML = usarGoogleSheets ? 
+            '✅ <strong>Google Sheets Conectado</strong> - Dados sincronizados' : 
+            '⚠️ <strong>Modo Offline</strong> - Dados no navegador';
+        api.style.color = usarGoogleSheets ? '#27ae60' : '#e67e22';
     }
-});
+    
+    if (status === 'success') {
+        setTimeout(() => {
+            if (txt) txt.textContent = 'Sincronizado ☁️';
+            if (ind) ind.className = 'sync-indicator';
+        }, 2000);
+    }
+}
 
-<script>
-let escalas = JSON.parse(localStorage.getItem("escalas")) || [];
-let eventos = JSON.parse(localStorage.getItem("eventos")) || [];
-let escalasPlantonistas = JSON.parse(localStorage.getItem("escalasPlantonistas")) || [];
-let mesAtualVizualizado = new Date();
-let visualizacaoAtual = 'mensal';
+function renderizarTudo() {
+    renderEscalasPlantonistas();
+    renderEscala();
+    renderEventos();
+    atualizarVisualizacao();
+    calcularEstatisticas();
+}
 
-function salvarDados(){ if(usarGoogleSheets) return;
+// ========================================
+// DADOS LOCAIS (FALLBACK)
+// ========================================
+
+function carregarDadosLocal(){
+    escalas = JSON.parse(localStorage.getItem("escalas")) || [];
+    eventos = JSON.parse(localStorage.getItem("eventos")) || [];
+    escalasPlantonistas = JSON.parse(localStorage.getItem("escalasPlantonistas")) || [];
+    
+    escalasPlantonistas.forEach(e => {
+        if (!e.datas) {
+            e.datas = gerarDatasEscala(e.dataInicio, e.mesAte, e.tipoOriginal || e.tipoEscala, e.horasTrabalho, e.horasFolga, e.opcoes || {});
+        }
+    });
+    
+    renderizarTudo();
+}
+
+function salvarDadosLocal(){
+    if(usarGoogleSheets) return; // Não salvar local se estiver usando Sheets
     localStorage.setItem("escalas", JSON.stringify(escalas));
     localStorage.setItem("eventos", JSON.stringify(eventos));
     localStorage.setItem("escalasPlantonistas", JSON.stringify(escalasPlantonistas));
@@ -731,29 +848,23 @@ function ajustarCamposTipoServico(){
     const camposRecorrentes = document.getElementById("camposRecorrentes");
     
     if(tipoServico === 'extra' || tipoServico === 'falta'){
-        // Serviço Extra ou Falta - não recorrente
         camposExtraFalta.classList.remove("oculto");
         camposRecorrentes.style.display = "none";
         
-        // Remove required dos campos recorrentes
         document.getElementById("tipoEscala").removeAttribute("required");
         document.getElementById("dataInicioPlantonista").removeAttribute("required");
         document.getElementById("mesFimPlantonista").removeAttribute("required");
         
-        // Adiciona required aos campos extra/falta
         document.getElementById("dataUnicaServico").setAttribute("required", "required");
         document.getElementById("qtdDiasServico").setAttribute("required", "required");
     } else {
-        // Serviço Normal - recorrente
         camposExtraFalta.classList.add("oculto");
         camposRecorrentes.style.display = "contents";
         
-        // Adiciona required aos campos recorrentes
         document.getElementById("tipoEscala").setAttribute("required", "required");
         document.getElementById("dataInicioPlantonista").setAttribute("required", "required");
         document.getElementById("mesFimPlantonista").setAttribute("required", "required");
         
-        // Remove required dos campos extra/falta
         document.getElementById("dataUnicaServico").removeAttribute("required");
         document.getElementById("qtdDiasServico").removeAttribute("required");
     }
@@ -790,29 +901,24 @@ function gerarDatasEscala(dataInicio, mesAte, tipo, horasTrabalho, horasFolga, o
         const diasTrabalho = marcarDiaPosterior ? 2 : 1;
         
         while(dataAtual <= dataLimite){
-            // Marca os dias de trabalho
             for(let d = 0; d < diasTrabalho; d++){
                 if(dataAtual <= dataLimite){
                     const dataStr = new Date(dataAtual).toISOString().split("T")[0];
                     
-                    // Adiciona turno Diurno (12h)
                     datas.push({
                         data: dataStr,
                         turno: "Diurno"
                     });
                     
-                    // Adiciona turno Noturno no MESMO dia (12h depois)
                     datas.push({
                         data: dataStr,
                         turno: "Noturno"
                     });
                     
-                    // Avança para o próximo dia (24h = 1 dia completo trabalhado)
                     dataAtual.setDate(dataAtual.getDate() + 1);
                 }
             }
             
-            // Adiciona as horas de folga
             const diasFolga = horasFolgaFinal / 24;
             dataAtual.setDate(dataAtual.getDate() + diasFolga);
         }
@@ -865,7 +971,7 @@ function calcularHorasEscala(tipo){
     }
 }
 
-document.getElementById("formEscalaPlantonista").addEventListener("submit", async (e)=>{
+document.getElementById("formEscalaPlantonista").addEventListener("submit", async (e) => {
     e.preventDefault();
     
     const tipoServico = document.getElementById("tipoServico").value;
@@ -874,7 +980,6 @@ document.getElementById("formEscalaPlantonista").addEventListener("submit", asyn
     const turno = document.getElementById("turnoPlantonista").value;
     const motivo = document.getElementById("motivoServico").value;
     
-    // EXTRA ou FALTA - Não recorrente
     if(tipoServico === 'extra' || tipoServico === 'falta'){
         const dataInicio = document.getElementById("dataUnicaServico").value;
         const qtdDias = parseInt(document.getElementById("qtdDiasServico").value);
@@ -893,30 +998,20 @@ document.getElementById("formEscalaPlantonista").addEventListener("submit", asyn
         
         const escala = {
             id: Date.now(),
-            nome: nome,
-            funcao: funcao,
-            tipoServico: tipoServico,
+            nome, funcao, tipoServico,
             tipoEscala: `${qtdDias} dia(s)`,
             tipoOriginal: 'nao-recorrente',
-            dataInicio: dataInicio,
-            mesAte: dataInicio.substring(0, 7), // Apenas ano-mes
-            turno: turno,
-            motivo: motivo,
-            qtdDias: qtdDias,
-            datas: datas
+            dataInicio, mesAte: dataInicio.substring(0, 7),
+            turno, motivo, qtdDias, datas
         };
         
-        escalasPlantonistas.push(escala); await salvarNoSheets(escala, "saveEscalaPlantonista");
-        salvarDados();
-        renderEscalasPlantonistas();
-        atualizarVisualizacao();
-        calcularEstatisticas();
+        escalasPlantonistas.push(escala);
+        await salvarNoSheets(escala, 'saveEscalaPlantonista');
         e.target.reset();
         ajustarCamposTipoServico();
         return;
     }
     
-    // NORMAL - Recorrente (código original)
     const tipo = document.getElementById("tipoEscala").value;
     let horasTrabalho, horasFolga;
     let tipoEscalaDisplay = tipo;
@@ -940,33 +1035,22 @@ document.getElementById("formEscalaPlantonista").addEventListener("submit", asyn
     
     const escala = {
         id: Date.now(),
-        nome: nome,
-        funcao: funcao,
-        tipoServico: tipoServico,
+        nome, funcao, tipoServico,
         tipoEscala: tipoEscalaDisplay,
         tipoOriginal: tipo,
         dataInicio: document.getElementById("dataInicioPlantonista").value,
         mesAte: document.getElementById("mesFimPlantonista").value,
-        turno: turno,
-        motivo: motivo,
-        horasTrabalho: horasTrabalho,
-        horasFolga: horasFolga,
-        opcoes: opcoes,
+        turno, motivo,
+        horasTrabalho, horasFolga, opcoes,
         datas: gerarDatasEscala(
             document.getElementById("dataInicioPlantonista").value,
             document.getElementById("mesFimPlantonista").value,
-            tipo,
-            horasTrabalho,
-            horasFolga,
-            opcoes
+            tipo, horasTrabalho, horasFolga, opcoes
         )
     };
     
-    escalasPlantonistas.push(escala); await salvarNoSheets(escala, "saveEscalaPlantonista");
-    salvarDados();
-    renderEscalasPlantonistas();
-    atualizarVisualizacao();
-    calcularEstatisticas();
+    escalasPlantonistas.push(escala);
+    await salvarNoSheets(escala, 'saveEscalaPlantonista');
     e.target.reset();
     ajustarCamposEscala();
     ajustarCamposTipoServico();
@@ -1011,30 +1095,22 @@ function editarEscalaPlantonista(id){
     const escala = escalasPlantonistas.find(e => e.id === id);
     if(!escala) return;
     
-    // Limpar formulário primeiro
     document.getElementById("formEscalaPlantonista").reset();
-    
-    // Scroll para o formulário
     document.getElementById("formEscalaPlantonista").scrollIntoView({ behavior: 'smooth', block: 'start' });
     
-    // Preencher campos básicos
     document.getElementById("nomePlantonista").value = escala.nome;
     document.getElementById("funcaoPlantonista").value = escala.funcao;
     document.getElementById("tipoServico").value = escala.tipoServico;
     document.getElementById("turnoPlantonista").value = escala.turno;
     document.getElementById("motivoServico").value = escala.motivo || "";
     
-    // Primeiro ajustar campos conforme tipo de serviço
     ajustarCamposTipoServico();
     
-    // Aguardar a renderização dos campos
     setTimeout(() => {
-        // Se for extra ou falta (não recorrente)
         if(escala.tipoServico === 'extra' || escala.tipoServico === 'falta'){
             document.getElementById("dataUnicaServico").value = escala.dataInicio;
             document.getElementById("qtdDiasServico").value = escala.qtdDias || 1;
         } else {
-            // Serviço normal (recorrente)
             document.getElementById("dataInicioPlantonista").value = escala.dataInicio;
             document.getElementById("mesFimPlantonista").value = escala.mesAte;
             
@@ -1070,21 +1146,17 @@ function editarEscalaPlantonista(id){
         }
     }, 100);
     
-    // Remover a escala da lista (sem confirmação)
     escalasPlantonistas = escalasPlantonistas.filter(e => e.id !== id);
-    salvarDados();
+    salvarDadosLocal();
     renderEscalasPlantonistas();
     atualizarVisualizacao();
     calcularEstatisticas();
 }
 
-function delEscalaPlantonista(id){
+async function delEscalaPlantonista(id){
     if(!confirm("Deseja excluir esta escala?")) return;
-    await excluirDoSheets(id, "deleteEscalaPlantonista"); escalasPlantonistas = escalasPlantonistas.filter(e => e.id !== id);
-    salvarDados();
-    renderEscalasPlantonistas();
-    atualizarVisualizacao();
-    calcularEstatisticas();
+    escalasPlantonistas = escalasPlantonistas.filter(e => e.id !== id);
+    await excluirDoSheets(id, 'deleteEscalaPlantonista');
 }
 
 function obterInfoServico(data){
@@ -1310,14 +1382,12 @@ function buscarPeriodo(){
     }
     
     if(dataInicio && dataFim){
-        // Mostrar múltiplos meses se o período for maior que 1 mês
         const inicio = new Date(dataInicio);
         const fim = new Date(dataFim);
         const diffMeses = (fim.getFullYear() - inicio.getFullYear()) * 12 + (fim.getMonth() - inicio.getMonth());
         
         if(diffMeses > 0){
             mudarVisualizacao('multimes');
-            // Ajustar o select de quantidade de meses
             const qtdSelect = document.getElementById("qtdMeses");
             if(diffMeses <= 3) qtdSelect.value = "3";
             else if(diffMeses <= 6) qtdSelect.value = "6";
@@ -1376,15 +1446,10 @@ function calcularEstatisticas(){
     let datasDispensa = new Set();
     let datasAvulso = new Set();
     
-    // Debug: contar registros vs dias únicos
-    let totalRegistros = 0;
-    
-    // Contar escalas recorrentes separadamente por tipo
     escalasPlantonistas.forEach(e => {
         if(e.datas && Array.isArray(e.datas)){
             e.datas.forEach(d => {
                 const data = typeof d === 'object' ? d.data : d;
-                totalRegistros++;
                 
                 if(e.tipoServico === 'normal'){
                     datasNormais.add(data);
@@ -1401,7 +1466,6 @@ function calcularEstatisticas(){
         }
     });
     
-    // Contar escalas avulsas separadamente
     escalas.forEach(e => {
         avulsoCount++;
         datasAvulso.add(e.data);
@@ -1415,22 +1479,12 @@ function calcularEstatisticas(){
         }
     });
     
-    // Contar dias únicos de cada tipo
     normais = datasNormais.size;
     extras = datasExtras.size;
     faltas = datasFaltas.size;
     dispensaMedica = datasDispensa.size;
     const avulsoDias = datasAvulso.size;
     
-    // Debug output
-    console.log("=== DEBUG ESTATÍSTICAS ===");
-    console.log("Total de registros:", totalRegistros);
-    console.log("Dias únicos normais:", normais);
-    console.log("Dias únicos extras:", extras);
-    console.log("Dias únicos dispensa:", dispensaMedica);
-    console.log("Dias únicos avulso:", avulsoDias);
-    
-    // Calcular folgas baseado no período EXATO com escalas
     let totalFolgas = 0;
     let totalDiasPeriodo = 0;
     let todasDatas = new Set([...datasNormais, ...datasExtras, ...datasFaltas, ...datasDispensa, ...datasAvulso]);
@@ -1440,37 +1494,22 @@ function calcularEstatisticas(){
         const primeiraData = datasArray[0];
         const ultimaData = datasArray[datasArray.length - 1];
         
-        console.log("Primeira data:", primeiraData);
-        console.log("Última data:", ultimaData);
-        
-        // Extrair ano e mês da primeira e última data
         const [anoInicio, mesInicio] = primeiraData.split('-').map(Number);
         const [anoFim, mesFim] = ultimaData.split('-').map(Number);
         
-        // Se começa em 01/01 e termina em 31/12 do mesmo ano = ano completo
         if(primeiraData === `${anoInicio}-01-01` && ultimaData === `${anoFim}-12-31` && anoInicio === anoFim){
             const ehBissexto = (anoInicio % 4 === 0 && anoInicio % 100 !== 0) || (anoInicio % 400 === 0);
             totalDiasPeriodo = ehBissexto ? 366 : 365;
-            console.log("Detectado ano completo:", anoInicio, "- Bissexto:", ehBissexto);
         } else {
-            // Calcular dias exatos entre as datas
             const dataMinima = new Date(primeiraData + 'T00:00:00');
             const dataMaxima = new Date(ultimaData + 'T00:00:00');
             const diffTime = dataMaxima.getTime() - dataMinima.getTime();
             totalDiasPeriodo = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-            console.log("Período personalizado - Total dias:", totalDiasPeriodo);
         }
         
-        // FÓRMULA: Total de dias do período - (Normais + Extras + Avulso + Dispensa)
         const diasTrabalhados = normais + extras + avulsoDias + dispensaMedica;
         totalFolgas = totalDiasPeriodo - diasTrabalhados;
         if(totalFolgas < 0) totalFolgas = 0;
-        
-        console.log("Total período:", totalDiasPeriodo);
-        console.log("Dias trabalhados:", diasTrabalhados);
-        console.log("Folgas:", totalFolgas);
-        console.log("Soma (deve ser igual ao período):", diasTrabalhados + totalFolgas);
-        console.log("========================");
     }
     
     document.getElementById("statNormais").textContent = normais;
@@ -1500,7 +1539,6 @@ async function exportarPDF(){
     pdf.save('escala-servico.pdf');
 }
 
-// ESCALAS AVULSAS
 function renderEscala(){
     const lista = document.getElementById("listaEscala");
     lista.innerHTML = "";
@@ -1524,11 +1562,9 @@ function renderEscala(){
 function editarEscala(i){
     const e = escalas[i];
     
-    // Limpar e scroll para o formulário
     document.getElementById("formEscala").reset();
     document.getElementById("formEscala").scrollIntoView({ behavior: 'smooth', block: 'start' });
     
-    // Preencher campos
     document.getElementById("nome").value = e.nome;
     document.getElementById("funcao").value = e.funcao;
     document.getElementById("data").value = e.data;
@@ -1536,9 +1572,8 @@ function editarEscala(i){
     document.getElementById("tipoServicoAvulso").value = e.tipoServico;
     document.getElementById("motivoAvulso").value = e.motivo || "";
     
-    // Remove a escala sem confirmação
     escalas.splice(i, 1);
-    salvarDados();
+    salvarDadosLocal();
     renderEscala();
     atualizarVisualizacao();
     calcularEstatisticas();
@@ -1563,70 +1598,74 @@ function renderEventos(){
 function editarEvento(i){
     const e = eventos[i];
     
-    // Limpar e scroll para o formulário
     document.getElementById("formEvento").reset();
     document.getElementById("formEvento").scrollIntoView({ behavior: 'smooth', block: 'start' });
     
-    // Preencher campos
     document.getElementById("dataEvento").value = e.data;
     document.getElementById("descricaoEvento").value = e.desc;
     
-    // Remove o evento sem confirmação
     eventos.splice(i, 1);
-    salvarDados();
+    salvarDadosLocal();
     renderEventos();
 }
 
-document.getElementById("formEscala").addEventListener("submit",async (e)=>{
+document.getElementById("formEscala").addEventListener("submit", async (e) => {
     e.preventDefault();
-    escalas.push({
+    const escala = {
         nome: nome.value,
         funcao: funcao.value,
         data: data.value,
         turno: turno.value,
         tipoServico: tipoServicoAvulso.value,
         motivo: motivoAvulso.value
-    });
-    salvarDados();
-    renderEscala();
-    atualizarVisualizacao();
-    calcularEstatisticas();
+    };
+    escalas.push(escala);
+    await salvarNoSheets(escala, 'saveEscalaAvulsa');
     e.target.reset();
 });
 
-document.getElementById("formEvento").addEventListener("submit",async (e)=>{
+document.getElementById("formEvento").addEventListener("submit", async (e) => {
     e.preventDefault();
-    eventos.push({
+    const evento = {
         data: dataEvento.value,
         desc: descricaoEvento.value
-    });
-    salvarDados();
-    renderEventos();
+    };
+    eventos.push(evento);
+    await salvarNoSheets(evento, 'saveEvento');
     e.target.reset();
 });
 
-function delEscala(i){
+async function delEscala(i){
     if(!confirm("Deseja excluir esta escala?")) return;
     escalas.splice(i,1);
-    salvarDados();
-    renderEscala();
-    atualizarVisualizacao();
-    calcularEstatisticas();
+    await excluirDoSheets(null, 'deleteEscalaAvulsa', i);
 }
 
-function delEvento(i){
+async function delEvento(i){
     if(!confirm("Deseja excluir este evento?")) return;
     eventos.splice(i,1);
-    salvarDados();
-    renderEventos();
+    await excluirDoSheets(null, 'deleteEvento', i);
 }
 
-// Inicialização
-renderEscala();
-renderEventos();
-renderEscalasPlantonistas();
-renderCalendario();
-calcularEstatisticas();
+// ========================================
+// INICIALIZAÇÃO
+// ========================================
+
+window.addEventListener('DOMContentLoaded', () => {
+    if (usarGoogleSheets) {
+        carregarDadosDoSheets();
+        syncInterval = setInterval(() => {
+            if (!isSyncing) carregarDadosDoSheets();
+        }, 5000);
+    } else {
+        carregarDadosLocal();
+    }
+    updateSyncStatus('Pronto', 'success');
+});
+
+window.addEventListener('beforeunload', () => {
+    if (syncInterval) clearInterval(syncInterval);
+});
 </script>
 
 </body>
