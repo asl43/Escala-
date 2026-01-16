@@ -640,6 +640,68 @@ Sistema Completo de Escala de Serviço • Funciona offline • v2.0
 
 </div>
 
+// ========================================
+// ⚡ GOOGLE SHEETS INTEGRATION
+// ========================================
+
+const API_URL = "https://script.google.com/macros/s/AKfycbzSFcfnIbnmj4MdN1f2biPRzmIC9lcr8CUA6oKxbUguOA-praBpeU5v01dFJn1lNJnbRQ/exec";
+let usarGoogleSheets = (API_URL !== "COLE_SUA_URL_AQUI");
+let isSyncing = false;
+let syncInterval = null;
+
+async function carregarDadosDoSheets() {
+    if (!usarGoogleSheets) { carregarDados(); return; }
+    if (isSyncing) return;
+    isSyncing = true;
+    document.getElementById("syncStatus").textContent = "Sincronizando...";
+    try {
+        const res = await fetch(`${API_URL}?action=sync&_=${Date.now()}`);
+        const data = await res.json();
+        if (data.success) {
+            escalasPlantonistas = data.escalasPlantonistas || [];
+            escalas = data.escalasAvulsas || [];
+            eventos = data.eventos || [];
+            escalasPlantonistas.forEach(e => {
+                e.datas = gerarDatasEscala(e.dataInicio, e.mesAte, e.tipoOriginal, e.horasTrabalho, e.horasFolga, e.opcoes);
+            });
+            renderEscalasPlantonistas(); renderEscala(); renderEventos();
+            atualizarVisualizacao(); calcularEstatisticas();
+            document.getElementById("syncStatus").textContent = "Sincronizado ☁️";
+        }
+    } catch(e) { console.error(e); carregarDados(); } finally { isSyncing = false; }
+}
+
+async function salvarNoSheets(dados, tipo) {
+    if (!usarGoogleSheets) { salvarDados(); return; }
+    const fd = new FormData();
+    fd.append("action", tipo);
+    fd.append("data", JSON.stringify(dados));
+    try {
+        await fetch(API_URL, { method: "POST", body: fd });
+        setTimeout(() => carregarDadosDoSheets(), 1000);
+    } catch(e) { salvarDados(); }
+}
+
+async function excluirDoSheets(id, tipo, idx) {
+    if (!usarGoogleSheets) { salvarDados(); renderEscalasPlantonistas(); renderEscala(); renderEventos(); atualizarVisualizacao(); calcularEstatisticas(); return; }
+    let url = `${API_URL}?action=${tipo}`;
+    if (id) url += `&id=${id}`;
+    if (idx !== undefined) url += `&index=${idx}`;
+    await fetch(url);
+    setTimeout(() => carregarDadosDoSheets(), 1000);
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    if (usarGoogleSheets) {
+        carregarDadosDoSheets();
+        setInterval(() => { if (!isSyncing) carregarDadosDoSheets(); }, 5000);
+        document.getElementById("apiStatus").innerHTML = "✅ <strong>Google Sheets Conectado</strong>";
+    } else {
+        carregarDados();
+        document.getElementById("apiStatus").innerHTML = "⚠️ <strong>Offline</strong> - Configure API_URL";
+    }
+});
+
 <script>
 let escalas = JSON.parse(localStorage.getItem("escalas")) || [];
 let eventos = JSON.parse(localStorage.getItem("eventos")) || [];
@@ -647,7 +709,7 @@ let escalasPlantonistas = JSON.parse(localStorage.getItem("escalasPlantonistas")
 let mesAtualVizualizado = new Date();
 let visualizacaoAtual = 'mensal';
 
-function salvarDados(){
+function salvarDados(){ if(usarGoogleSheets) return;
     localStorage.setItem("escalas", JSON.stringify(escalas));
     localStorage.setItem("eventos", JSON.stringify(eventos));
     localStorage.setItem("escalasPlantonistas", JSON.stringify(escalasPlantonistas));
@@ -803,7 +865,7 @@ function calcularHorasEscala(tipo){
     }
 }
 
-document.getElementById("formEscalaPlantonista").addEventListener("submit", e=>{
+document.getElementById("formEscalaPlantonista").addEventListener("submit", async (e)=>{
     e.preventDefault();
     
     const tipoServico = document.getElementById("tipoServico").value;
@@ -844,7 +906,7 @@ document.getElementById("formEscalaPlantonista").addEventListener("submit", e=>{
             datas: datas
         };
         
-        escalasPlantonistas.push(escala);
+        escalasPlantonistas.push(escala); await salvarNoSheets(escala, "saveEscalaPlantonista");
         salvarDados();
         renderEscalasPlantonistas();
         atualizarVisualizacao();
@@ -900,7 +962,7 @@ document.getElementById("formEscalaPlantonista").addEventListener("submit", e=>{
         )
     };
     
-    escalasPlantonistas.push(escala);
+    escalasPlantonistas.push(escala); await salvarNoSheets(escala, "saveEscalaPlantonista");
     salvarDados();
     renderEscalasPlantonistas();
     atualizarVisualizacao();
@@ -1018,7 +1080,7 @@ function editarEscalaPlantonista(id){
 
 function delEscalaPlantonista(id){
     if(!confirm("Deseja excluir esta escala?")) return;
-    escalasPlantonistas = escalasPlantonistas.filter(e => e.id !== id);
+    await excluirDoSheets(id, "deleteEscalaPlantonista"); escalasPlantonistas = escalasPlantonistas.filter(e => e.id !== id);
     salvarDados();
     renderEscalasPlantonistas();
     atualizarVisualizacao();
@@ -1515,7 +1577,7 @@ function editarEvento(i){
     renderEventos();
 }
 
-document.getElementById("formEscala").addEventListener("submit",e=>{
+document.getElementById("formEscala").addEventListener("submit",async (e)=>{
     e.preventDefault();
     escalas.push({
         nome: nome.value,
@@ -1532,7 +1594,7 @@ document.getElementById("formEscala").addEventListener("submit",e=>{
     e.target.reset();
 });
 
-document.getElementById("formEvento").addEventListener("submit",e=>{
+document.getElementById("formEvento").addEventListener("submit",async (e)=>{
     e.preventDefault();
     eventos.push({
         data: dataEvento.value,
