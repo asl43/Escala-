@@ -389,7 +389,20 @@ footer{
         <div class="stat-number" id="statFaltas">0</div>
     </div>
     <div class="stat-card">
-        <div class="stat-label">Total de Dias</div>
+        <div class="stat-label">Dispensa Médica</div>
+        <div class="stat-number" id="statDispensa">0</div>
+        <small style="font-size:11px;opacity:0.7;">(Acima de 8 dias)</small>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Avulso/Permuta</div>
+        <div class="stat-number" id="statAvulso">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Total de Folgas</div>
+        <div class="stat-number" id="statFolgas">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Total de Dias Trabalhados</div>
         <div class="stat-number" id="statTotal">0</div>
     </div>
 </div>
@@ -406,12 +419,26 @@ footer{
     <input type="text" id="nomePlantonista" placeholder="Nome" required>
     <input type="text" id="funcaoPlantonista" placeholder="Função" required>
     
-    <select id="tipoServico" required>
+    <select id="tipoServico" required onchange="ajustarCamposTipoServico()">
         <option value="">Tipo de Serviço</option>
         <option value="normal">🟢 Serviço Normal</option>
         <option value="extra">🔵 Serviço Extra</option>
         <option value="falta">🟠 Falta/Atestado</option>
     </select>
+    
+    <div id="camposExtraFalta" class="oculto" style="grid-column:1/-1;">
+        <div style="background:var(--info-box-bg);padding:15px;border-radius:5px;margin-top:10px;">
+            <p style="margin:0 0 10px 0;font-weight:bold;">⚠️ Serviços Extra e Faltas não são recorrentes</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
+                <input type="date" id="dataUnicaServico" placeholder="Data do serviço" required>
+                <input type="number" id="qtdDiasServico" placeholder="Quantidade de dias" min="1" max="365" required>
+            </div>
+            <small style="display:block;margin-top:5px;color:#555;">
+                O sistema marcará a quantidade de dias informada a partir da data selecionada.<br>
+                <strong>Mais de 8 dias será contabilizado como Dispensa Médica.</strong>
+            </small>
+        </div>
+    </div>
     
     <select id="tipoEscala" onchange="ajustarCamposEscala()" required>
         <option value="">Tipo de Escala</option>
@@ -423,6 +450,8 @@ footer{
         <option value="24x72">24x72</option>
         <option value="personalizada">Personalizada</option>
     </select>
+    
+    <div id="camposRecorrentes" style="grid-column:1/-1;display:contents;">
     
     <div id="camposDiaPosterior" class="oculto" style="grid-column:1/-1;">
         <div style="background:var(--info-box-bg);padding:10px;border-radius:5px;margin-top:10px;">
@@ -449,7 +478,11 @@ footer{
     <input type="date" id="dataInicioPlantonista" required>
     <input type="month" id="mesFimPlantonista" required>
     
+    </div>
+    
     <select id="turnoPlantonista">
+        <option value="Diurno">Diurno</option>
+        <option value="Noturno">Noturno</option>
         <option value="Manhã">Manhã</option>
         <option value="Tarde">Tarde</option>
         <option value="Noite">Noite</option>
@@ -483,6 +516,17 @@ footer{
 <!-- VISUALIZAÇÃO DO CALENDÁRIO -->
 <div class="card">
 <h2>📆 Calendário</h2>
+
+<div class="info-box no-print">
+    <strong>🔍 Busca Retroativa:</strong> Navegue pelos meses/anos anteriores ou use os filtros abaixo para verificar seu histórico de trabalho.
+</div>
+
+<div class="view-controls no-print" style="border-bottom:1px solid var(--border-color);padding-bottom:15px;margin-bottom:15px;">
+    <input type="date" id="dataInicioBusca" placeholder="Data início" style="flex:1;min-width:150px;">
+    <input type="date" id="dataFimBusca" placeholder="Data fim" style="flex:1;min-width:150px;">
+    <button onclick="buscarPeriodo()">🔍 Buscar Período</button>
+    <button onclick="voltarHoje()">📅 Hoje</button>
+</div>
 
 <div class="view-controls no-print">
     <button id="btnMensal" class="active" onclick="mudarVisualizacao('mensal')">📅 Mensal</button>
@@ -536,6 +580,8 @@ footer{
 <input type="text" id="funcao" placeholder="Função" required>
 <input type="date" id="data" required>
 <select id="turno">
+<option value="Diurno">Diurno</option>
+<option value="Noturno">Noturno</option>
 <option value="Manhã">Manhã</option>
 <option value="Tarde">Tarde</option>
 <option value="Noite">Noite</option>
@@ -617,6 +663,40 @@ if(localStorage.getItem('darkMode') === 'true'){
     document.body.classList.add('dark-mode');
 }
 
+function ajustarCamposTipoServico(){
+    const tipoServico = document.getElementById("tipoServico").value;
+    const camposExtraFalta = document.getElementById("camposExtraFalta");
+    const camposRecorrentes = document.getElementById("camposRecorrentes");
+    
+    if(tipoServico === 'extra' || tipoServico === 'falta'){
+        // Serviço Extra ou Falta - não recorrente
+        camposExtraFalta.classList.remove("oculto");
+        camposRecorrentes.style.display = "none";
+        
+        // Remove required dos campos recorrentes
+        document.getElementById("tipoEscala").removeAttribute("required");
+        document.getElementById("dataInicioPlantonista").removeAttribute("required");
+        document.getElementById("mesFimPlantonista").removeAttribute("required");
+        
+        // Adiciona required aos campos extra/falta
+        document.getElementById("dataUnicaServico").setAttribute("required", "required");
+        document.getElementById("qtdDiasServico").setAttribute("required", "required");
+    } else {
+        // Serviço Normal - recorrente
+        camposExtraFalta.classList.add("oculto");
+        camposRecorrentes.style.display = "contents";
+        
+        // Adiciona required aos campos recorrentes
+        document.getElementById("tipoEscala").setAttribute("required", "required");
+        document.getElementById("dataInicioPlantonista").setAttribute("required", "required");
+        document.getElementById("mesFimPlantonista").setAttribute("required", "required");
+        
+        // Remove required dos campos extra/falta
+        document.getElementById("dataUnicaServico").removeAttribute("required");
+        document.getElementById("qtdDiasServico").removeAttribute("required");
+    }
+}
+
 function ajustarCamposEscala(){
     const tipo = document.getElementById("tipoEscala").value;
     const camposPersonalizada = document.getElementById("camposPersonalizada");
@@ -648,24 +728,31 @@ function gerarDatasEscala(dataInicio, mesAte, tipo, horasTrabalho, horasFolga, o
         const diasTrabalho = marcarDiaPosterior ? 2 : 1;
         
         while(dataAtual <= dataLimite){
+            // Marca os dias de trabalho
             for(let d = 0; d < diasTrabalho; d++){
                 if(dataAtual <= dataLimite){
+                    const dataStr = new Date(dataAtual).toISOString().split("T")[0];
+                    
+                    // Adiciona turno Diurno (12h)
                     datas.push({
-                        data: new Date(dataAtual).toISOString().split("T")[0],
+                        data: dataStr,
                         turno: "Diurno"
                     });
-                    dataAtual.setHours(dataAtual.getHours() + 12);
                     
-                    if(dataAtual <= dataLimite){
-                        datas.push({
-                            data: new Date(dataAtual).toISOString().split("T")[0],
-                            turno: "Noturno"
-                        });
-                        dataAtual.setHours(dataAtual.getHours() + 12);
-                    }
+                    // Adiciona turno Noturno no MESMO dia (12h depois)
+                    datas.push({
+                        data: dataStr,
+                        turno: "Noturno"
+                    });
+                    
+                    // Avança para o próximo dia (24h = 1 dia completo trabalhado)
+                    dataAtual.setDate(dataAtual.getDate() + 1);
                 }
             }
-            dataAtual.setHours(dataAtual.getHours() + horasFolgaFinal);
+            
+            // Adiciona as horas de folga
+            const diasFolga = horasFolgaFinal / 24;
+            dataAtual.setDate(dataAtual.getDate() + diasFolga);
         }
     }
     else if(tipo === "diario-8h"){
@@ -719,6 +806,55 @@ function calcularHorasEscala(tipo){
 document.getElementById("formEscalaPlantonista").addEventListener("submit", e=>{
     e.preventDefault();
     
+    const tipoServico = document.getElementById("tipoServico").value;
+    const nome = document.getElementById("nomePlantonista").value;
+    const funcao = document.getElementById("funcaoPlantonista").value;
+    const turno = document.getElementById("turnoPlantonista").value;
+    const motivo = document.getElementById("motivoServico").value;
+    
+    // EXTRA ou FALTA - Não recorrente
+    if(tipoServico === 'extra' || tipoServico === 'falta'){
+        const dataInicio = document.getElementById("dataUnicaServico").value;
+        const qtdDias = parseInt(document.getElementById("qtdDiasServico").value);
+        
+        const datas = [];
+        const dataBase = new Date(dataInicio + "T00:00:00");
+        
+        for(let i = 0; i < qtdDias; i++){
+            const data = new Date(dataBase);
+            data.setDate(data.getDate() + i);
+            datas.push({
+                data: data.toISOString().split("T")[0],
+                turno: turno
+            });
+        }
+        
+        const escala = {
+            id: Date.now(),
+            nome: nome,
+            funcao: funcao,
+            tipoServico: tipoServico,
+            tipoEscala: `${qtdDias} dia(s)`,
+            tipoOriginal: 'nao-recorrente',
+            dataInicio: dataInicio,
+            mesAte: dataInicio.substring(0, 7), // Apenas ano-mes
+            turno: turno,
+            motivo: motivo,
+            qtdDias: qtdDias,
+            datas: datas
+        };
+        
+        escalasPlantonistas.push(escala);
+        salvarDados();
+        renderEscalasPlantonistas();
+        atualizarVisualizacao();
+        calcularEstatisticas();
+        e.target.reset();
+        ajustarCamposTipoServico();
+        return;
+    }
+    
+    // NORMAL - Recorrente (código original)
     const tipo = document.getElementById("tipoEscala").value;
     let horasTrabalho, horasFolga;
     let tipoEscalaDisplay = tipo;
@@ -742,15 +878,15 @@ document.getElementById("formEscalaPlantonista").addEventListener("submit", e=>{
     
     const escala = {
         id: Date.now(),
-        nome: document.getElementById("nomePlantonista").value,
-        funcao: document.getElementById("funcaoPlantonista").value,
-        tipoServico: document.getElementById("tipoServico").value,
+        nome: nome,
+        funcao: funcao,
+        tipoServico: tipoServico,
         tipoEscala: tipoEscalaDisplay,
         tipoOriginal: tipo,
         dataInicio: document.getElementById("dataInicioPlantonista").value,
         mesAte: document.getElementById("mesFimPlantonista").value,
-        turno: document.getElementById("turnoPlantonista").value,
-        motivo: document.getElementById("motivoServico").value,
+        turno: turno,
+        motivo: motivo,
         horasTrabalho: horasTrabalho,
         horasFolga: horasFolga,
         opcoes: opcoes,
@@ -771,6 +907,7 @@ document.getElementById("formEscalaPlantonista").addEventListener("submit", e=>{
     calcularEstatisticas();
     e.target.reset();
     ajustarCamposEscala();
+    ajustarCamposTipoServico();
 });
 
 function renderEscalasPlantonistas(){
@@ -812,35 +949,71 @@ function editarEscalaPlantonista(id){
     const escala = escalasPlantonistas.find(e => e.id === id);
     if(!escala) return;
     
+    // Limpar formulário primeiro
+    document.getElementById("formEscalaPlantonista").reset();
+    
+    // Scroll para o formulário
+    document.getElementById("formEscalaPlantonista").scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // Preencher campos básicos
     document.getElementById("nomePlantonista").value = escala.nome;
     document.getElementById("funcaoPlantonista").value = escala.funcao;
     document.getElementById("tipoServico").value = escala.tipoServico;
-    document.getElementById("dataInicioPlantonista").value = escala.dataInicio;
-    document.getElementById("mesFimPlantonista").value = escala.mesAte;
     document.getElementById("turnoPlantonista").value = escala.turno;
     document.getElementById("motivoServico").value = escala.motivo || "";
     
-    const tipo = escala.tipoOriginal || escala.tipoEscala;
+    // Primeiro ajustar campos conforme tipo de serviço
+    ajustarCamposTipoServico();
     
-    if(tipo === "personalizada" || (!["12x24-12x72","12x24-12x48","12x24-12x96","diario-8h","24x48","24x72"].includes(tipo))){
-        document.getElementById("tipoEscala").value = "personalizada";
-        ajustarCamposEscala();
-        document.getElementById("horasTrabalho").value = escala.horasTrabalho;
-        document.getElementById("horasFolga").value = escala.horasFolga;
-        if(escala.opcoes && escala.opcoes.incluirFinaisSemana !== undefined){
-            document.getElementById("incluirFinaisSemana").checked = escala.opcoes.incluirFinaisSemana;
-        }
-    } else {
-        document.getElementById("tipoEscala").value = tipo;
-        ajustarCamposEscala();
-        if(tipo === "12x24-12x72" || tipo === "12x24-12x48" || tipo === "12x24-12x96"){
-            if(escala.opcoes && escala.opcoes.marcarDiaPosterior !== undefined){
-                document.getElementById("marcarDiaPosterior").checked = escala.opcoes.marcarDiaPosterior;
+    // Aguardar a renderização dos campos
+    setTimeout(() => {
+        // Se for extra ou falta (não recorrente)
+        if(escala.tipoServico === 'extra' || escala.tipoServico === 'falta'){
+            document.getElementById("dataUnicaServico").value = escala.dataInicio;
+            document.getElementById("qtdDiasServico").value = escala.qtdDias || 1;
+        } else {
+            // Serviço normal (recorrente)
+            document.getElementById("dataInicioPlantonista").value = escala.dataInicio;
+            document.getElementById("mesFimPlantonista").value = escala.mesAte;
+            
+            const tipo = escala.tipoOriginal || escala.tipoEscala;
+            
+            if(tipo && tipo !== "nao-recorrente"){
+                if(tipo === "personalizada" || (!["12x24-12x72","12x24-12x48","12x24-12x96","diario-8h","24x48","24x72"].includes(tipo))){
+                    document.getElementById("tipoEscala").value = "personalizada";
+                    ajustarCamposEscala();
+                    
+                    setTimeout(() => {
+                        if(escala.horasTrabalho){
+                            document.getElementById("horasTrabalho").value = escala.horasTrabalho;
+                            document.getElementById("horasFolga").value = escala.horasFolga;
+                        }
+                        if(escala.opcoes && escala.opcoes.incluirFinaisSemana !== undefined){
+                            document.getElementById("incluirFinaisSemana").checked = escala.opcoes.incluirFinaisSemana;
+                        }
+                    }, 50);
+                } else {
+                    document.getElementById("tipoEscala").value = tipo;
+                    ajustarCamposEscala();
+                    
+                    setTimeout(() => {
+                        if(tipo === "12x24-12x72" || tipo === "12x24-12x48" || tipo === "12x24-12x96"){
+                            if(escala.opcoes && escala.opcoes.marcarDiaPosterior !== undefined){
+                                document.getElementById("marcarDiaPosterior").checked = escala.opcoes.marcarDiaPosterior;
+                            }
+                        }
+                    }, 50);
+                }
             }
         }
-    }
+    }, 100);
     
-    delEscalaPlantonista(id);
+    // Remover a escala da lista (sem confirmação)
+    escalasPlantonistas = escalasPlantonistas.filter(e => e.id !== id);
+    salvarDados();
+    renderEscalasPlantonistas();
+    atualizarVisualizacao();
+    calcularEstatisticas();
 }
 
 function delEscalaPlantonista(id){
@@ -1059,6 +1232,46 @@ function renderMultiMes(){
     }
 }
 
+function buscarPeriodo(){
+    const dataInicio = document.getElementById("dataInicioBusca").value;
+    const dataFim = document.getElementById("dataFimBusca").value;
+    
+    if(!dataInicio && !dataFim){
+        alert("Por favor, informe pelo menos uma data para buscar.");
+        return;
+    }
+    
+    if(dataInicio){
+        const [ano, mes] = dataInicio.split("-");
+        mesAtualVizualizado = new Date(parseInt(ano), parseInt(mes) - 1, 1);
+        atualizarVisualizacao();
+    }
+    
+    if(dataInicio && dataFim){
+        // Mostrar múltiplos meses se o período for maior que 1 mês
+        const inicio = new Date(dataInicio);
+        const fim = new Date(dataFim);
+        const diffMeses = (fim.getFullYear() - inicio.getFullYear()) * 12 + (fim.getMonth() - inicio.getMonth());
+        
+        if(diffMeses > 0){
+            mudarVisualizacao('multimes');
+            // Ajustar o select de quantidade de meses
+            const qtdSelect = document.getElementById("qtdMeses");
+            if(diffMeses <= 3) qtdSelect.value = "3";
+            else if(diffMeses <= 6) qtdSelect.value = "6";
+            else qtdSelect.value = "12";
+            renderMultiMes();
+        }
+    }
+}
+
+function voltarHoje(){
+    mesAtualVizualizado = new Date();
+    document.getElementById("dataInicioBusca").value = "";
+    document.getElementById("dataFimBusca").value = "";
+    mudarVisualizacao('mensal');
+}
+
 function mudarVisualizacao(tipo){
     visualizacaoAtual = tipo;
     
@@ -1094,25 +1307,117 @@ function atualizarVisualizacao(){
 }
 
 function calcularEstatisticas(){
-    let normais = 0, extras = 0, faltas = 0;
+    let normais = 0, extras = 0, faltas = 0, dispensaMedica = 0, avulsoCount = 0;
+    let datasNormais = new Set();
+    let datasExtras = new Set();
+    let datasFaltas = new Set();
+    let datasDispensa = new Set();
+    let datasAvulso = new Set();
     
+    // Debug: contar registros vs dias únicos
+    let totalRegistros = 0;
+    
+    // Contar escalas recorrentes separadamente por tipo
     escalasPlantonistas.forEach(e => {
-        const qtd = e.datas ? e.datas.length : 0;
-        if(e.tipoServico === 'normal') normais += qtd;
-        else if(e.tipoServico === 'extra') extras += qtd;
-        else if(e.tipoServico === 'falta') faltas += qtd;
+        if(e.datas && Array.isArray(e.datas)){
+            e.datas.forEach(d => {
+                const data = typeof d === 'object' ? d.data : d;
+                totalRegistros++;
+                
+                if(e.tipoServico === 'normal'){
+                    datasNormais.add(data);
+                } else if(e.tipoServico === 'extra'){
+                    datasExtras.add(data);
+                } else if(e.tipoServico === 'falta'){
+                    if(e.datas.length > 8){
+                        datasDispensa.add(data);
+                    } else {
+                        datasFaltas.add(data);
+                    }
+                }
+            });
+        }
     });
     
+    // Contar escalas avulsas separadamente
     escalas.forEach(e => {
-        if(e.tipoServico === 'normal') normais++;
-        else if(e.tipoServico === 'extra') extras++;
-        else if(e.tipoServico === 'falta') faltas++;
+        avulsoCount++;
+        datasAvulso.add(e.data);
+        
+        if(e.tipoServico === 'normal') {
+            datasNormais.add(e.data);
+        } else if(e.tipoServico === 'extra') {
+            datasExtras.add(e.data);
+        } else if(e.tipoServico === 'falta') {
+            datasFaltas.add(e.data);
+        }
     });
+    
+    // Contar dias únicos de cada tipo
+    normais = datasNormais.size;
+    extras = datasExtras.size;
+    faltas = datasFaltas.size;
+    dispensaMedica = datasDispensa.size;
+    const avulsoDias = datasAvulso.size;
+    
+    // Debug output
+    console.log("=== DEBUG ESTATÍSTICAS ===");
+    console.log("Total de registros:", totalRegistros);
+    console.log("Dias únicos normais:", normais);
+    console.log("Dias únicos extras:", extras);
+    console.log("Dias únicos dispensa:", dispensaMedica);
+    console.log("Dias únicos avulso:", avulsoDias);
+    
+    // Calcular folgas baseado no período EXATO com escalas
+    let totalFolgas = 0;
+    let totalDiasPeriodo = 0;
+    let todasDatas = new Set([...datasNormais, ...datasExtras, ...datasFaltas, ...datasDispensa, ...datasAvulso]);
+    
+    if(todasDatas.size > 0){
+        const datasArray = Array.from(todasDatas).sort();
+        const primeiraData = datasArray[0];
+        const ultimaData = datasArray[datasArray.length - 1];
+        
+        console.log("Primeira data:", primeiraData);
+        console.log("Última data:", ultimaData);
+        
+        // Extrair ano e mês da primeira e última data
+        const [anoInicio, mesInicio] = primeiraData.split('-').map(Number);
+        const [anoFim, mesFim] = ultimaData.split('-').map(Number);
+        
+        // Se começa em 01/01 e termina em 31/12 do mesmo ano = ano completo
+        if(primeiraData === `${anoInicio}-01-01` && ultimaData === `${anoFim}-12-31` && anoInicio === anoFim){
+            const ehBissexto = (anoInicio % 4 === 0 && anoInicio % 100 !== 0) || (anoInicio % 400 === 0);
+            totalDiasPeriodo = ehBissexto ? 366 : 365;
+            console.log("Detectado ano completo:", anoInicio, "- Bissexto:", ehBissexto);
+        } else {
+            // Calcular dias exatos entre as datas
+            const dataMinima = new Date(primeiraData + 'T00:00:00');
+            const dataMaxima = new Date(ultimaData + 'T00:00:00');
+            const diffTime = dataMaxima.getTime() - dataMinima.getTime();
+            totalDiasPeriodo = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            console.log("Período personalizado - Total dias:", totalDiasPeriodo);
+        }
+        
+        // FÓRMULA: Total de dias do período - (Normais + Extras + Avulso + Dispensa)
+        const diasTrabalhados = normais + extras + avulsoDias + dispensaMedica;
+        totalFolgas = totalDiasPeriodo - diasTrabalhados;
+        if(totalFolgas < 0) totalFolgas = 0;
+        
+        console.log("Total período:", totalDiasPeriodo);
+        console.log("Dias trabalhados:", diasTrabalhados);
+        console.log("Folgas:", totalFolgas);
+        console.log("Soma (deve ser igual ao período):", diasTrabalhados + totalFolgas);
+        console.log("========================");
+    }
     
     document.getElementById("statNormais").textContent = normais;
     document.getElementById("statExtras").textContent = extras;
     document.getElementById("statFaltas").textContent = faltas;
-    document.getElementById("statTotal").textContent = normais + extras + faltas;
+    document.getElementById("statDispensa").textContent = dispensaMedica;
+    document.getElementById("statAvulso").textContent = avulsoCount;
+    document.getElementById("statFolgas").textContent = totalFolgas;
+    document.getElementById("statTotal").textContent = normais + extras + faltas + dispensaMedica;
 }
 
 async function exportarPDF(){
@@ -1156,13 +1461,25 @@ function renderEscala(){
 
 function editarEscala(i){
     const e = escalas[i];
+    
+    // Limpar e scroll para o formulário
+    document.getElementById("formEscala").reset();
+    document.getElementById("formEscala").scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // Preencher campos
     document.getElementById("nome").value = e.nome;
     document.getElementById("funcao").value = e.funcao;
     document.getElementById("data").value = e.data;
     document.getElementById("turno").value = e.turno;
     document.getElementById("tipoServicoAvulso").value = e.tipoServico;
     document.getElementById("motivoAvulso").value = e.motivo || "";
-    delEscala(i);
+    
+    // Remove a escala sem confirmação
+    escalas.splice(i, 1);
+    salvarDados();
+    renderEscala();
+    atualizarVisualizacao();
+    calcularEstatisticas();
 }
 
 function renderEventos(){
@@ -1183,9 +1500,19 @@ function renderEventos(){
 
 function editarEvento(i){
     const e = eventos[i];
+    
+    // Limpar e scroll para o formulário
+    document.getElementById("formEvento").reset();
+    document.getElementById("formEvento").scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // Preencher campos
     document.getElementById("dataEvento").value = e.data;
     document.getElementById("descricaoEvento").value = e.desc;
-    delEvento(i);
+    
+    // Remove o evento sem confirmação
+    eventos.splice(i, 1);
+    salvarDados();
+    renderEventos();
 }
 
 document.getElementById("formEscala").addEventListener("submit",e=>{
