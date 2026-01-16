@@ -684,7 +684,7 @@ Sistema de Escala - Google Sheets Integrado • Sincronização Automática • 
 // ⚡ GOOGLE SHEETS INTEGRATION
 // ========================================
 
-const API_URL = "https://script.google.com/macros/s/AKfycbz2j7canmvq_3bmwp53VIzDKTKEsmByY2a0L1HMzi52-JM2LeBsau05kNhvw08oP5q-VA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzSFcfnIbnmj4MdN1f2biPRzmIC9lcr8CUA6oKxbUguOA-praBpeU5v01dFJn1lNJnbRQ/exec";
 let usarGoogleSheets = (API_URL !== "COLE_SUA_URL_AQUI");
 let isSyncing = false;
 let syncInterval = null;
@@ -717,8 +717,31 @@ async function carregarDadosDoSheets() {
             escalas = data.escalasAvulsas || [];
             eventos = data.eventos || [];
             
+            // Gerar datas APENAS para escalas recorrentes
             escalasPlantonistas.forEach(e => {
-                e.datas = gerarDatasEscala(e.dataInicio, e.mesAte, e.tipoOriginal, e.horasTrabalho, e.horasFolga, e.opcoes);
+                // Se já tem datas OU não é recorrente, não gerar
+                if (e.datas && e.datas.length > 0) {
+                    // Já tem datas, não precisa gerar
+                    return;
+                }
+                
+                // Se é não-recorrente (extra/falta), não gerar datas
+                if (e.tipoOriginal === 'nao-recorrente') {
+                    // As datas já foram criadas ao salvar
+                    return;
+                }
+                
+                // Apenas para escalas recorrentes normais
+                if (e.tipoOriginal && e.tipoOriginal !== 'nao-recorrente') {
+                    e.datas = gerarDatasEscala(
+                        e.dataInicio, 
+                        e.mesAte, 
+                        e.tipoOriginal, 
+                        e.horasTrabalho, 
+                        e.horasFolga, 
+                        e.opcoes || {}
+                    );
+                }
             });
             
             renderizarTudo();
@@ -817,8 +840,26 @@ function carregarDadosLocal(){
     escalasPlantonistas = JSON.parse(localStorage.getItem("escalasPlantonistas")) || [];
     
     escalasPlantonistas.forEach(e => {
-        if (!e.datas) {
-            e.datas = gerarDatasEscala(e.dataInicio, e.mesAte, e.tipoOriginal || e.tipoEscala, e.horasTrabalho, e.horasFolga, e.opcoes || {});
+        // Se já tem datas, não gerar novamente
+        if (e.datas && e.datas.length > 0) {
+            return;
+        }
+        
+        // Se é não-recorrente (extra/falta), não gerar datas
+        if (e.tipoOriginal === 'nao-recorrente') {
+            return;
+        }
+        
+        // Apenas para escalas recorrentes
+        if (e.tipoOriginal && e.tipoOriginal !== 'nao-recorrente') {
+            e.datas = gerarDatasEscala(
+                e.dataInicio, 
+                e.mesAte, 
+                e.tipoOriginal, 
+                e.horasTrabalho, 
+                e.horasFolga, 
+                e.opcoes || {}
+            );
         }
     });
     
@@ -889,18 +930,28 @@ function ajustarCamposEscala(){
 
 function gerarDatasEscala(dataInicio, mesAte, tipo, horasTrabalho, horasFolga, opcoes = {}){
     const datas = [];
+    
+    // Proteção: se não tem tipo ou é nao-recorrente, retornar vazio
+    if (!tipo || tipo === 'nao-recorrente') {
+        return [];
+    }
+    
     const inicio = new Date(dataInicio + "T00:00:00");
     const [anoFim, mesFim] = mesAte.split("-");
     const dataLimite = new Date(parseInt(anoFim), parseInt(mesFim), 0);
     
     let dataAtual = new Date(inicio);
+    let iteracoes = 0;
+    const MAX_ITERACOES = 10000; // Proteção contra loop infinito
     
     if(tipo === "12x24-12x72" || tipo === "12x24-12x48" || tipo === "12x24-12x96"){
         const horasFolgaFinal = tipo === "12x24-12x72" ? 72 : tipo === "12x24-12x48" ? 48 : 96;
         const marcarDiaPosterior = opcoes.marcarDiaPosterior || false;
         const diasTrabalho = marcarDiaPosterior ? 2 : 1;
         
-        while(dataAtual <= dataLimite){
+        while(dataAtual <= dataLimite && iteracoes < MAX_ITERACOES){
+            iteracoes++;
+            
             for(let d = 0; d < diasTrabalho; d++){
                 if(dataAtual <= dataLimite){
                     const dataStr = new Date(dataAtual).toISOString().split("T")[0];
@@ -924,7 +975,8 @@ function gerarDatasEscala(dataInicio, mesAte, tipo, horasTrabalho, horasFolga, o
         }
     }
     else if(tipo === "diario-8h"){
-        while(dataAtual <= dataLimite){
+        while(dataAtual <= dataLimite && iteracoes < MAX_ITERACOES){
+            iteracoes++;
             const diaSemana = dataAtual.getDay();
             if(diaSemana !== 0 && diaSemana !== 6){
                 datas.push({
@@ -939,7 +991,8 @@ function gerarDatasEscala(dataInicio, mesAte, tipo, horasTrabalho, horasFolga, o
         let emServico = true;
         const incluirFinaisSemana = opcoes.incluirFinaisSemana !== undefined ? opcoes.incluirFinaisSemana : true;
         
-        while(dataAtual <= dataLimite){
+        while(dataAtual <= dataLimite && iteracoes < MAX_ITERACOES){
+            iteracoes++;
             const diaSemana = dataAtual.getDay();
             const ehFinalSemana = diaSemana === 0 || diaSemana === 6;
             
@@ -954,6 +1007,10 @@ function gerarDatasEscala(dataInicio, mesAte, tipo, horasTrabalho, horasFolga, o
             dataAtual.setHours(dataAtual.getHours() + horasAdicionar);
             emServico = !emServico;
         }
+    }
+    
+    if(iteracoes >= MAX_ITERACOES){
+        console.error("AVISO: Loop infinito detectado em gerarDatasEscala. Interrompido.");
     }
     
     return datas;
