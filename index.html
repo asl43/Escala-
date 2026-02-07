@@ -1673,6 +1673,7 @@ function calcularEstatisticas(){
     let normais = 0, extras = 0, faltas = 0, dispensaMedica = 0, ferias = 0, avulsoCount = 0;
     let datasNormais = new Set(), datasExtras = new Set(), datasFaltas = new Set(), datasDispensa = new Set(), datasFerias = new Set(), datasAvulso = new Set();
     
+    // Coletar dados das escalas plantonistas
     escalasPlantonistas.forEach(e => {
         if(e.datas && Array.isArray(e.datas)){
             e.datas.forEach(d => {
@@ -1694,6 +1695,7 @@ function calcularEstatisticas(){
         }
     });
     
+    // Coletar dados das escalas avulsas
     escalas.forEach(e => {
         avulsoCount++;
         datasAvulso.add(e.data);
@@ -1703,6 +1705,7 @@ function calcularEstatisticas(){
         else if(e.tipoServico === 'ferias') datasFerias.add(e.data);
     });
     
+    // Calcular totais
     normais = datasNormais.size;
     extras = datasExtras.size;
     faltas = datasFaltas.size;
@@ -1710,7 +1713,12 @@ function calcularEstatisticas(){
     ferias = datasFerias.size;
     const avulsoDias = datasAvulso.size;
     
-    let totalFolgas = 0, totalDiasPeriodo = 0;
+    // 🔧 CORREÇÃO: Cálculo correto de dias trabalhados e folgas
+    // DIAS TRABALHADOS = Normais + Extras + Avulsos - Faltas - Dispensas
+    const diasTrabalhados = normais + extras + avulsoDias - faltas - dispensaMedica;
+    
+    // Calcular período total
+    let totalFolgas = 0;
     let todasDatas = new Set([...datasNormais, ...datasExtras, ...datasFaltas, ...datasDispensa, ...datasFerias, ...datasAvulso]);
     
     if(todasDatas.size > 0){
@@ -1720,12 +1728,14 @@ function calcularEstatisticas(){
         const dataMinima = new Date(primeiraData + 'T00:00:00');
         const dataMaxima = new Date(ultimaData + 'T00:00:00');
         const diffTime = dataMaxima.getTime() - dataMinima.getTime();
-        totalDiasPeriodo = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        const diasTrabalhados = normais + extras + avulsoDias + dispensaMedica + ferias;
-        totalFolgas = totalDiasPeriodo - diasTrabalhados;
+        const totalDiasPeriodo = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        
+        // FOLGAS = Total de dias do período - Dias efetivamente trabalhados - Férias
+        totalFolgas = totalDiasPeriodo - diasTrabalhados - ferias;
         if(totalFolgas < 0) totalFolgas = 0;
     }
     
+    // Atualizar interface
     document.getElementById("statNormais").textContent = normais;
     document.getElementById("statExtras").textContent = extras;
     document.getElementById("statFaltas").textContent = faltas;
@@ -1733,8 +1743,22 @@ function calcularEstatisticas(){
     document.getElementById("statFerias").textContent = ferias;
     document.getElementById("statAvulso").textContent = avulsoCount;
     document.getElementById("statFolgas").textContent = totalFolgas;
-    document.getElementById("statTotal").textContent = normais + extras + faltas + dispensaMedica + ferias;
+    document.getElementById("statTotal").textContent = diasTrabalhados; // ← CORRIGIDO
+    
+    // 🎯 LOGS PARA DEBUG (opcional - pode comentar depois)
+    console.log('=== 📊 ESTATÍSTICAS ===');
+    console.log('Normais:', normais);
+    console.log('Extras:', extras);
+    console.log('Avulsos:', avulsoDias);
+    console.log('Faltas:', faltas);
+    console.log('Dispensas:', dispensaMedica);
+    console.log('Férias:', ferias);
+    console.log('---');
+    console.log('DIAS TRABALHADOS:', diasTrabalhados, '=', normais, '+', extras, '+', avulsoDias, '-', faltas, '-', dispensaMedica);
+    console.log('FOLGAS:', totalFolgas);
+    console.log('==================');
 }
+
 
 async function exportarPDF(){
     const { jsPDF } = window.jspdf;
