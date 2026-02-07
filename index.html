@@ -875,13 +875,40 @@ async function carregarDadosDoSheets() {
         if (data.success) {
             escalasPlantonistas = data.escalasPlantonistas || [];
             escalas = data.escalasAvulsas || [];
+            
+            // 🔧 CORREÇÃO: Regenerar datas para TODAS as escalas (incluindo não-recorrentes)
             escalasPlantonistas.forEach(e => {
-                if (e.datas && e.datas.length > 0) return;
-                if (e.tipoOriginal === 'nao-recorrente') return;
+                // Se já tem datas salvas, usar elas
+                if (e.datas && e.datas.length > 0) {
+                    console.log(`✅ Escala ${e.nome} já tem ${e.datas.length} datas`);
+                    return;
+                }
+                
+                // Se é escala recorrente, gerar datas
                 if (e.tipoOriginal && e.tipoOriginal !== 'nao-recorrente') {
+                    console.log(`🔄 Gerando datas para escala recorrente: ${e.nome}`);
                     e.datas = gerarDatasEscala(e.dataInicio, e.mesAte, e.tipoOriginal, e.horasTrabalho, e.horasFolga, e.opcoes || {});
                 }
+                
+                // 🎯 NOVO: Se é Extra/Falta/Férias (não-recorrente), gerar datas também
+                if (e.tipoOriginal === 'nao-recorrente' && (e.tipoServico === 'extra' || e.tipoServico === 'falta' || e.tipoServico === 'ferias')) {
+                    console.log(`🎯 Gerando datas para ${e.tipoServico}: ${e.nome}, ${e.qtdDias} dias`);
+                    
+                    const datas = [];
+                    const dataBase = new Date(e.dataInicio + "T00:00:00");
+                    const qtdDias = e.qtdDias || 1;
+                    
+                    for(let i = 0; i < qtdDias; i++){
+                        const data = new Date(dataBase);
+                        data.setDate(data.getDate() + i);
+                        datas.push({data: data.toISOString().split("T")[0], turno: e.turno});
+                    }
+                    
+                    e.datas = datas;
+                    console.log(`✅ ${datas.length} datas geradas para ${e.nome}`);
+                }
             });
+            
             renderizarTudo();
             updateSyncStatus('Sincronizado ☁️', 'success');
         }
@@ -1144,13 +1171,40 @@ function imprimirMes() {
 function carregarDadosLocal(){
     escalas = JSON.parse(localStorage.getItem("escalas")) || [];
     escalasPlantonistas = JSON.parse(localStorage.getItem("escalasPlantonistas")) || [];
+    
+    // 🔧 CORREÇÃO: Regenerar datas para TODAS as escalas (incluindo não-recorrentes)
     escalasPlantonistas.forEach(e => {
-        if (e.datas && e.datas.length > 0) return;
-        if (e.tipoOriginal === 'nao-recorrente') return;
+        // Se já tem datas salvas, usar elas
+        if (e.datas && e.datas.length > 0) {
+            console.log(`✅ Escala ${e.nome} já tem ${e.datas.length} datas`);
+            return;
+        }
+        
+        // Se é escala recorrente, gerar datas
         if (e.tipoOriginal && e.tipoOriginal !== 'nao-recorrente') {
+            console.log(`🔄 Gerando datas para escala recorrente: ${e.nome}`);
             e.datas = gerarDatasEscala(e.dataInicio, e.mesAte, e.tipoOriginal, e.horasTrabalho, e.horasFolga, e.opcoes || {});
         }
+        
+        // 🎯 NOVO: Se é Extra/Falta/Férias (não-recorrente), gerar datas também
+        if (e.tipoOriginal === 'nao-recorrente' && (e.tipoServico === 'extra' || e.tipoServico === 'falta' || e.tipoServico === 'ferias')) {
+            console.log(`🎯 Gerando datas para ${e.tipoServico}: ${e.nome}, ${e.qtdDias} dias`);
+            
+            const datas = [];
+            const dataBase = new Date(e.dataInicio + "T00:00:00");
+            const qtdDias = e.qtdDias || 1;
+            
+            for(let i = 0; i < qtdDias; i++){
+                const data = new Date(dataBase);
+                data.setDate(data.getDate() + i);
+                datas.push({data: data.toISOString().split("T")[0], turno: e.turno});
+            }
+            
+            e.datas = datas;
+            console.log(`✅ ${datas.length} datas geradas para ${e.nome}`);
+        }
     });
+    
     renderizarTudo();
 }
 
