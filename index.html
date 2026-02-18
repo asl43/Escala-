@@ -564,6 +564,86 @@ footer{
 .widget {
     animation: fadeInUp 0.6s ease-out;
 }
+
+/* Toggle horas/dias */
+.toggle-modo {
+    display: flex;
+    gap: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px solid var(--header-bg);
+    margin-bottom: 15px;
+    width: fit-content;
+}
+.toggle-modo button {
+    padding: 10px 22px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--header-bg);
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+.toggle-modo button.ativo {
+    background: var(--header-bg);
+    color: #fff;
+}
+.toggle-modo button:hover:not(.ativo) {
+    background: rgba(59,130,246,0.1);
+}
+.badge-dias {
+    display: inline-block;
+    background: #10b981;
+    color: #fff;
+    border-radius: 8px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-left: 8px;
+}
+.badge-horas {
+    display: inline-block;
+    background: #3b82f6;
+    color: #fff;
+    border-radius: 8px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-left: 8px;
+}
+.info-modo {
+    background: var(--info-box-bg);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-top: 10px;
+    border: 1px solid var(--border-color);
+    line-height: 1.7;
+}
+.dia-semana-card {
+    background: var(--info-box-bg);
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+}
+.dia-semana-card h5 {
+    color: var(--header-bg);
+    font-size: 14px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+.semana-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+}
+@media (max-width: 768px) {
+    .semana-grid { grid-template-columns: 1fr; }
+    .toggle-modo { width: 100%; }
+    .toggle-modo button { flex: 1; }
+}
 </style>
 </head>
 <body>
@@ -722,15 +802,49 @@ footer{
     </div>
     
     <div id="camposPersonalizada" class="oculto" style="grid-column:1/-1;">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px;margin-top:15px;">
-            <input type="number" id="horasTrabalho" placeholder="Horas de trabalho" min="1">
-            <input type="number" id="horasFolga" placeholder="Horas de folga" min="1">
-        </div>
-        <div style="background:var(--info-box-bg);padding:15px;border-radius:12px;margin-top:15px;">
-            <label style="display:flex;align-items:center;gap:12px;cursor:pointer;">
-                <input type="checkbox" id="incluirFinaisSemana">
-                <span style="font-weight:600;">Incluir finais de semana</span>
-            </label>
+        <div style="background:var(--info-box-bg);padding:20px;border-radius:12px;margin-top:15px;">
+            <p style="margin:0 0 12px 0;font-weight:700;font-size:15px;">⚙️ Modo de Escala Personalizada</p>
+            <div class="toggle-modo">
+                <button type="button" id="btnModoHoras" class="ativo" onclick="selecionarModo('horas')">⏱️ Por Horas</button>
+                <button type="button" id="btnModoDias" onclick="selecionarModo('dias')">📅 Por Dias</button>
+            </div>
+
+            <!-- Modo Horas -->
+            <div id="modoHoras">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px;margin-bottom:12px;">
+                    <div>
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">⏱️ Horas de Trabalho <span class="badge-horas">ex: 12</span></label>
+                        <input type="number" id="horasTrabalho" placeholder="Ex: 12, 24..." min="1" max="24">
+                    </div>
+                    <div>
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">😴 Horas de Folga <span class="badge-horas">ex: 48</span></label>
+                        <input type="number" id="horasFolga" placeholder="Ex: 24, 48, 72..." min="1">
+                    </div>
+                </div>
+                <div class="info-modo">💡 <strong>Exemplo:</strong> 12h trabalho + 48h folga = escala 12x48 — o sistema calculará automaticamente os dias no calendário.</div>
+            </div>
+
+            <!-- Modo Dias -->
+            <div id="modoDias" class="oculto">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px;margin-bottom:12px;">
+                    <div>
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">📅 Dias Trabalhando <span class="badge-dias">ex: 5</span></label>
+                        <input type="number" id="diasTrabalho" placeholder="Ex: 5, 3, 2..." min="1" max="30">
+                    </div>
+                    <div>
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">🏖️ Dias de Folga <span class="badge-dias">ex: 2</span></label>
+                        <input type="number" id="diasFolga" placeholder="Ex: 2, 1, 3..." min="1" max="30">
+                    </div>
+                </div>
+                <div class="info-modo">💡 <strong>Exemplo:</strong> 5 dias trabalhando + 2 dias folga = escala 5x2. O calendário marcará automaticamente com a cor do tipo de serviço (🟢 Normal ou 🔵 Extra).</div>
+            </div>
+
+            <div style="margin-top:15px;">
+                <label style="display:flex;align-items:center;gap:12px;cursor:pointer;">
+                    <input type="checkbox" id="incluirFinaisSemana">
+                    <span style="font-weight:600;">Incluir finais de semana</span>
+                </label>
+            </div>
         </div>
     </div>
     
@@ -1246,6 +1360,15 @@ function ajustarCamposTipoServico(){
     }
 }
 
+function selecionarModo(modo) {
+    document.getElementById('modoHoras').classList.toggle('oculto', modo !== 'horas');
+    document.getElementById('modoDias').classList.toggle('oculto', modo !== 'dias');
+    document.getElementById('btnModoHoras').classList.toggle('ativo', modo === 'horas');
+    document.getElementById('btnModoDias').classList.toggle('ativo', modo === 'dias');
+    // guardar o modo atual num atributo para uso no submit
+    document.getElementById('camposPersonalizada').dataset.modo = modo;
+}
+
 function ajustarCamposEscala(){
     const tipo = document.getElementById("tipoEscala").value;
     const camposPersonalizada = document.getElementById("camposPersonalizada");
@@ -1272,10 +1395,10 @@ function gerarDatasEscala(dataInicio, mesAte, tipo, horasTrabalho, horasFolga, o
     if(tipo === "12x24-12x72" || tipo === "12x24-12x48" || tipo === "12x24-12x96"){
         const horasFolgaFinal = tipo === "12x24-12x72" ? 72 : tipo === "12x24-12x48" ? 48 : 96;
         const marcarDiaPosterior = opcoes.marcarDiaPosterior || false;
-        const diasTrabalho = marcarDiaPosterior ? 2 : 1;
+        const diasTrabalhoQtd = marcarDiaPosterior ? 2 : 1;
         while(dataAtual <= dataLimite && iteracoes < MAX_ITERACOES){
             iteracoes++;
-            for(let d = 0; d < diasTrabalho; d++){
+            for(let d = 0; d < diasTrabalhoQtd; d++){
                 if(dataAtual <= dataLimite){
                     const dataStr = new Date(dataAtual).toISOString().split("T")[0];
                     datas.push({data: dataStr, turno: "Diurno"});
@@ -1297,7 +1420,33 @@ function gerarDatasEscala(dataInicio, mesAte, tipo, horasTrabalho, horasFolga, o
             dataAtual.setDate(dataAtual.getDate() + 1);
         }
     }
+    // 🆕 MODO DIAS: X dias trabalhando + Y dias folga
+    else if(tipo === "personalizada-dias"){
+        const diasTrab = opcoes.diasTrabalho || 1;
+        const diasFolg = opcoes.diasFolga || 1;
+        const incluirFDS = opcoes.incluirFinaisSemana !== undefined ? opcoes.incluirFinaisSemana : true;
+        let contadorTrab = 0;
+        let contadorFolga = 0;
+        let emServico = true;
+        while(dataAtual <= dataLimite && iteracoes < MAX_ITERACOES){
+            iteracoes++;
+            const diaSemana = dataAtual.getDay();
+            const ehFDS = diaSemana === 0 || diaSemana === 6;
+            if(emServico){
+                if(incluirFDS || !ehFDS){
+                    datas.push({data: new Date(dataAtual).toISOString().split("T")[0], turno: "Plantão"});
+                }
+                contadorTrab++;
+                if(contadorTrab >= diasTrab){ contadorTrab = 0; emServico = false; }
+            } else {
+                contadorFolga++;
+                if(contadorFolga >= diasFolg){ contadorFolga = 0; emServico = true; }
+            }
+            dataAtual.setDate(dataAtual.getDate() + 1);
+        }
+    }
     else {
+        // MODO HORAS (padrão personalizada)
         let emServico = true;
         const incluirFinaisSemana = opcoes.incluirFinaisSemana !== undefined ? opcoes.incluirFinaisSemana : true;
         while(dataAtual <= dataLimite && iteracoes < MAX_ITERACOES){
@@ -1372,10 +1521,24 @@ document.getElementById("formEscalaPlantonista").addEventListener("submit", asyn
     }
     
     if(tipo === "personalizada"){
-        horasTrabalho = parseInt(document.getElementById("horasTrabalho").value);
-        horasFolga = parseInt(document.getElementById("horasFolga").value);
-        tipoEscalaDisplay = `${horasTrabalho}x${horasFolga}`;
-        opcoes.incluirFinaisSemana = document.getElementById("incluirFinaisSemana").checked;
+        const modoCampo = document.getElementById('camposPersonalizada').dataset.modo || 'horas';
+        if(modoCampo === 'dias'){
+            const diasTrab = parseInt(document.getElementById("diasTrabalho").value);
+            const diasFolg = parseInt(document.getElementById("diasFolga").value);
+            if(!diasTrab || !diasFolg){ alert("Informe os dias de trabalho e folga."); return; }
+            tipoEscalaDisplay = `${diasTrab}d x ${diasFolg}d`;
+            opcoes.diasTrabalho = diasTrab;
+            opcoes.diasFolga = diasFolg;
+            opcoes.incluirFinaisSemana = document.getElementById("incluirFinaisSemana").checked;
+            opcoes.modoDias = true;
+            horasTrabalho = diasTrab * 24; // valores dummy para compatibilidade
+            horasFolga = diasFolg * 24;
+        } else {
+            horasTrabalho = parseInt(document.getElementById("horasTrabalho").value);
+            horasFolga = parseInt(document.getElementById("horasFolga").value);
+            tipoEscalaDisplay = `${horasTrabalho}x${horasFolga}`;
+            opcoes.incluirFinaisSemana = document.getElementById("incluirFinaisSemana").checked;
+        }
     } else {
         const horas = calcularHorasEscala(tipo);
         horasTrabalho = horas.trabalho;
@@ -1385,14 +1548,15 @@ document.getElementById("formEscalaPlantonista").addEventListener("submit", asyn
     const escala = {
         id: Date.now(), nome, funcao, tipoServico,
         tipoEscala: tipoEscalaDisplay,
-        tipoOriginal: tipo,
+        tipoOriginal: (tipo === 'personalizada' && opcoes.modoDias) ? 'personalizada-dias' : tipo,
         dataInicio: document.getElementById("dataInicioPlantonista").value,
         mesAte: document.getElementById("mesFimPlantonista").value,
         turno, motivo, horasTrabalho, horasFolga, opcoes,
         datas: gerarDatasEscala(
             document.getElementById("dataInicioPlantonista").value,
             document.getElementById("mesFimPlantonista").value,
-            tipo, horasTrabalho, horasFolga, opcoes
+            (tipo === 'personalizada' && opcoes.modoDias) ? 'personalizada-dias' : tipo,
+            horasTrabalho, horasFolga, opcoes
         )
     };
     escalasPlantonistas.push(escala);
@@ -1415,6 +1579,7 @@ function renderEscalasPlantonistas(){
         if(e.tipoOriginal === "12x24-12x48") tipoDisplay = "12x24+12x48";
         if(e.tipoOriginal === "12x24-12x96") tipoDisplay = "12x24+12x96";
         if(e.tipoOriginal === "diario-8h") tipoDisplay = "Diário 8h";
+        if(e.tipoOriginal === "personalizada-dias") tipoDisplay = `📅 ${e.opcoes.diasTrabalho}d × ${e.opcoes.diasFolga}d folga`;
         if(e.opcoes && e.opcoes.marcarDiaPosterior) tipoDisplay += " (2d)";
         if(e.opcoes && e.opcoes.incluirFinaisSemana) tipoDisplay += " (c/FDS)";
         if(e.opcoes && e.opcoes.incluirFinaisSemana === false) tipoDisplay += " (s/FDS)";
@@ -1443,10 +1608,22 @@ function editarEscalaPlantonista(id){
             document.getElementById("mesFimPlantonista").value = escala.mesAte;
             const tipo = escala.tipoOriginal || escala.tipoEscala;
             if(tipo && tipo !== "nao-recorrente"){
-                if(tipo === "personalizada" || (!["12x24-12x72","12x24-12x48","12x24-12x96","diario-8h","24x48","24x72"].includes(tipo))){
+                if(tipo === "personalizada-dias"){
                     document.getElementById("tipoEscala").value = "personalizada";
                     ajustarCamposEscala();
                     setTimeout(() => {
+                        selecionarModo('dias');
+                        if(escala.opcoes){
+                            if(escala.opcoes.diasTrabalho) document.getElementById("diasTrabalho").value = escala.opcoes.diasTrabalho;
+                            if(escala.opcoes.diasFolga) document.getElementById("diasFolga").value = escala.opcoes.diasFolga;
+                            if(escala.opcoes.incluirFinaisSemana !== undefined) document.getElementById("incluirFinaisSemana").checked = escala.opcoes.incluirFinaisSemana;
+                        }
+                    }, 50);
+                } else if(tipo === "personalizada" || (!["12x24-12x72","12x24-12x48","12x24-12x96","diario-8h","24x48","24x72"].includes(tipo))){
+                    document.getElementById("tipoEscala").value = "personalizada";
+                    ajustarCamposEscala();
+                    setTimeout(() => {
+                        selecionarModo('horas');
                         if(escala.horasTrabalho){
                             document.getElementById("horasTrabalho").value = escala.horasTrabalho;
                             document.getElementById("horasFolga").value = escala.horasFolga;
